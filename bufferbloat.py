@@ -122,11 +122,10 @@ def start_iperf(net):
     # that the TCP flow is not receiver window limited.  If it is,
     # there is a chance that the router buffer may not get filled up.
     server = h2.popen("iperf -s -w 16m")
-    # TODO: Start the iperf client on h1.  Ensure that you create a
-    # long lived TCP flow. You may need to redirect iperf's stdout to avoid blocking.
+
+    # Sending the iperf flow from h1 to h2 with the given duration
     h1 = net.get('h1')
-    print "Starting iperf client and tcp flow for %ss" % args.time
-    h1.cmd("iperf -t %s -c %s" % (args, args.time, h2.IP()))
+    h1.cmd("iperf -t %s -c %s" % (args.time, h2.IP()))
 
 
 def start_webserver(net):

@@ -146,12 +146,22 @@ def start_ping(net):
     # Note that if the command prints out a lot of text to stdout, it will block
     # until stdout is read. You can avoid this by runnning popen.communicate() or
     # redirecting stdout
-    h1 = net.get('h1')
-    # popen = h1.popen("echo '' > %s/ping.txt" % (args.dir), shell=True)
-    h2 = net.get('h2')
-    popen = h1.popen("ping -c %s -i 0.1 %s > %s/ping.txt" %
-                     (args.time * 10, h2.IP(), args.dir), shell=True)
+    h1 = net.get("h1")
+    h2 = net.get("h2")
+    h1.popen("ping -c %s -i 0.1 %s > %s/ping.txt" %
+             (args.time * 10, h2.IP(), args.dir), shell=True)
     return
+
+
+def get_web_measurement(net):
+    h1 = net.get('h1')
+    h2 = net.get('h2')
+    results = []
+    for i in range(3):
+        t = h2.popen(
+            'curl -o /dev/null -s -w %%{time_total} %s/http/index.html' % h1.IP()).communicate()[0]
+    results.append(t)
+    return results
 
 
 def bufferbloat():
@@ -220,10 +230,6 @@ def bufferbloat():
         print "%.1fs left..." % (args.time - delta)
 
     wdt = np.array(web_dltime).astype(np.float)
-    f = open('./web_result.txt', 'w+')
-    f.write("Mean of web download: %lf \n" % np.mean(wdt))
-    f.write("Standard deviation: %lf \n" % np.std(wdt))
-    f.close()
     # TODO: compute average (and standard deviation) of the fetch
     # times.  You don't need to plot them.  Just note it in your
     # README and explain.

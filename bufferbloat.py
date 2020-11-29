@@ -151,7 +151,7 @@ def start_ping(net):
     # popen = h1.popen("echo '' > %s/ping.txt" % (args.dir), shell=True)
     h2 = net.get('h2')
     popen = h1.popen("ping -c %s -i 0.1 %s > %s/ping.txt" %
-                     (time * 10, h2.IP(), args.dir), shell=True)
+                     (args.time * 10, h2.IP(), args.dir), shell=True)
     return
 
 

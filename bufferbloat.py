@@ -187,9 +187,9 @@ def bufferbloat():
 
     # TODO: Start iperf, webservers, etc.
     # start_iperf(net)
-    iperf = start_iperf(net)
+    iperf = Process(target=start_iperf, args=(net, ))
+    ping = Process(target=start_ping, args=(net, ))
     iperf.start()
-    ping = start_ping(net)
     ping.start()
 
     webservers = start_webserver(net)

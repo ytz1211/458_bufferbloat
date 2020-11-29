@@ -229,7 +229,6 @@ def bufferbloat():
             break
         print "%.1fs left..." % (args.time - delta)
 
-    wdt = np.array(web_dltime).astype(np.float)
     # TODO: compute average (and standard deviation) of the fetch
     # times.  You don't need to plot them.  Just note it in your
     # README and explain.

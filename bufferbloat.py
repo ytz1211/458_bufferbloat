@@ -8,6 +8,7 @@ from mininet.net import Mininet
 from mininet.log import lg, info
 from mininet.util import dumpNodeConnections
 from mininet.cli import CLI
+from mininet.clean import cleanup
 
 from subprocess import Popen, PIPE
 from time import sleep, time
@@ -20,7 +21,6 @@ import termcolor as T
 import sys
 import os
 import math
-import numpy as np
 
 # TODO: Don't just read the TODO sections in this code.  Remember that
 # one of the goals of this assignment is for you to learn how to use
@@ -72,43 +72,30 @@ class BBTopo(Topo):
     "Simple topology for bufferbloat experiment."
 
     def build(self, n=2):
+        # Here are two hosts
+        hosts = []
+        for i in range(1, n+1):
+            hosts.append(self.addHost('h%d' % (i)))
+
         # Here I have created a switch.  If you change its name, its
         # interface names will change from s0-eth1 to newname-eth1.
         switch = self.addSwitch('s0')
-        print "Setting %s hosts" % n
-        for i in range(n):
-            host = self.addHost('h%s' % (i + 1))
-
-        print "Setting up the link from h1 to switch"
-        # Link from h1 to router. 10Gbs with 5ms delay.
-        delay = args.delay
-        bw_host = args.bw_host
-        bw_net = args.bw_net
-        maxq = args.maxq
-        time = args.time
-        print "Parameters: delay %s, host bw %s, bottleneck bw %s, time %s" % \
-            (delay, bw_host, bw_net, time)
-        self.addLink('h1', switch,
-                     bw=bw_host, delay='%sms' % delay, max_queue_size=maxq)
-
-        print "Setting up the link from switch to h2"
-        # Link from Router to h2. 1.5Mbs, 5ms delay.
-        self.addLink(switch, 'h2',
-                     bw=bw_net, delay='%sms' % delay, max_queue_size=maxq)
+        print "Parameters: delay %s, host bw %s, bottleneck bw %s, time %s" % (args.delay, args.bw_host, args.bw_net, args.time)
+        # TODO: Add links with appropriate characteristics
+        # Link h1 to router with 1Gbs and 4ms delay
+        self.addLink('h1', switch, bw=args.bw_host, delay='%sms' %
+                     args.delay, max_queue_size=args.maxq)
+        # Link router to h2 with 10Mbs and 4ms delay
+        self.addLink(switch, 'h2', bw=args.bw_host, delay='%sms' %
+                     args.delay, max_queue_size=args.maxq)
         return
 
 # Simple wrappers around monitoring utilities.  You are welcome to
 # contribute neatly written (using classes) monitoring scripts for
 # Mininet!
 
-
-def start_tcpprobe(outfile="cwnd.txt"):
-    os.system("rmmod tcp_probe; modprobe tcp_probe full=1;")
-    return
-
-# Simple wrappers around monitoring utilities.  You are welcome to
-# contribute neatly written (using classes) monitoring scripts for
-# Mininet!
+# tcp_probe is a kernel module which records cwnd over time. In linux >= 4.16
+# it has been replaced by the tcp:tcp_probe kernel tracepoint.
 
 
 def start_tcpprobe(outfile="cwnd.txt"):
@@ -135,12 +122,11 @@ def start_iperf(net):
     # that the TCP flow is not receiver window limited.  If it is,
     # there is a chance that the router buffer may not get filled up.
     server = h2.popen("iperf -s -w 16m")
-
-    # Sending the iperf flow from h1 to h2 with the given duration
+    # TODO: Start the iperf client on h1.  Ensure that you create a
+    # long lived TCP flow. You may need to redirect iperf's stdout to avoid blocking.
     h1 = net.get('h1')
-    time = args.time
-    print "Starting iperf client and tcp flow for %ss" % time
-    h1.cmd("iperf -t %s -c %s" % (time, h2.IP()))
+    print "Starting iperf client and tcp flow for %ss" % args.time
+    h1.cmd("iperf -t %s -c %s" % (args, time, h2.IP()))
 
 
 def start_webserver(net):
@@ -151,31 +137,32 @@ def start_webserver(net):
 
 
 def start_ping(net):
-    print "Starting ping from h1 to h2, 10 times a sec"
-    h1 = net.get("h1")
-    h2 = net.get("h2")
-    # Sending ping for 10 * time packets
-    time = args.time
-    h1.popen("ping -c %s -i 0.1 %s > %s/ping.txt" %
-             (time * 10, h2.IP(), args.dir), shell=True)
-    return
+    # TODO: Start a ping train from h1 to h2 (or h2 to h1, does it
+    # matter?)  Measure RTTs every 0.1 second.  Read the ping man page
+    # to see how to do this.
 
-
-def get_web_measurement(net):
+    # Hint: Use host.popen(cmd, shell=True).  If you pass shell=True
+    # to popen, you can redirect cmd's output using shell syntax.
+    # i.e. ping ... > /path/to/ping.txt
+    # Note that if the command prints out a lot of text to stdout, it will block
+    # until stdout is read. You can avoid this by runnning popen.communicate() or
+    # redirecting stdout
     h1 = net.get('h1')
+    # popen = h1.popen("echo '' > %s/ping.txt" % (args.dir), shell=True)
     h2 = net.get('h2')
-    results = []
-    for i in range(3):
-        t = h2.popen(
-            'curl -o /dev/null -s -w %%{time_total} %s/http/index.html' % h1.IP()).communicate()[0]
-    results.append(t)
-    return results
+    popen = h1.popen("ping -c %s -i 0.1 %s > %s/ping.txt" %
+                     (time * 10, h2.IP(), args.dir), shell=True)
+    return
 
 
 def bufferbloat():
     if not os.path.exists(args.dir):
         os.makedirs(args.dir)
     os.system("sysctl -w net.ipv4.tcp_congestion_control=%s" % args.cong)
+
+    # Cleanup any leftovers from previous mininet runs
+    cleanup()
+
     topo = BBTopo()
     net = Mininet(topo=topo, host=CPULimitedHost, link=TCLink)
     net.start()
@@ -184,50 +171,56 @@ def bufferbloat():
     dumpNodeConnections(net.hosts)
     # This performs a basic all pairs ping test.
     net.pingAll()
+
     # Start all the monitoring processes
     start_tcpprobe("cwnd.txt")
+    start_ping(net)
 
     # TODO: Start monitoring the queue sizes.  Since the switch I
     # created is "s0", I monitor one of the interfaces.  Which
     # interface?  The interface numbering starts with 1 and increases.
     # Depending on the order you add links to your network, this
     # number may be 1 or 2.  Ensure you use the correct number.
-    qmon = start_qmon(iface='s0-eth2',
-                      outfile='%s/q.txt' % (args.dir))
+    #
+    # qmon = start_qmon(iface='s0-eth2',
+    #                  outfile='%s/q.txt' % (args.dir))
+    qmon = start_qmon(iface='s0-eth2', outfile='%s/q.txt' % (args.dir))
 
     # TODO: Start iperf, webservers, etc.
-    iperf_proc = Process(target=start_iperf, args=(net, ))
-    ping_proc = Process(target=start_ping, args=(net, ))
-    iperf_proc.start()
-    ping_proc.start()
+    # start_iperf(net)
+    iperf = start_iperf(net)
+    iperf.start()
+    ping = start_ping(net)
+    ping.start()
 
-    # TODO: Close the procs...
     webservers = start_webserver(net)
+
+    # Hint: The command below invokes a CLI which you can use to
+    # debug.  It allows you to run arbitrary commands inside your
+    # emulated hosts h1 and h2.
+    #
+    # CLI(net)
 
     # TODO: measure the time it takes to complete webpage transfer
     # from h1 to h2 (say) 3 times.  Hint: check what the following
     # command does: curl -o /dev/null -s -w %{time_total} google.com
     # Now use the curl command to fetch webpage from the webserver you
     # spawned on host h1 (not from google!)
-
     # Hint: have a separate function to do this and you may find the
     # loop below useful.
-    # I think it's done -- Eyal
-    web_download_time = []
     start_time = time()
+    web_dltime = []
     while True:
         # do the measurement (say) 3 times.
-        web_download_time.extend(get_web_measurement(net))
-        sleep(5)
+        web_dltime.extend(get_web_measurement(net))
+        sleep(1)
         now = time()
         delta = now - start_time
         if delta > args.time:
             break
         print "%.1fs left..." % (args.time - delta)
-    # print web_download_time
 
-    wdt = np.array(web_download_time).astype(np.float)
-    # TODO: Move to readme
+    wdt = np.array(web_dltime).astype(np.float)
     f = open('./web_result.txt', 'w+')
     f.write("Mean of web download: %lf \n" % np.mean(wdt))
     f.write("Standard deviation: %lf \n" % np.std(wdt))
@@ -235,15 +228,10 @@ def bufferbloat():
     # TODO: compute average (and standard deviation) of the fetch
     # times.  You don't need to plot them.  Just note it in your
     # README and explain.
-    # I think it's done, need to add results to readme in a meaningfull way
-
-    # Hint: The command below invokes a CLI which you can use to
-    # debug.  It allows you to run arbitrary commands inside your
-    # emulated hosts h1 and h2.
-    # CLI(net)
 
     stop_tcpprobe()
-    qmon.terminate()
+    if qmon is not None:
+        qmon.terminate()
     net.stop()
     # Ensure that all processes you create within Mininet are killed.
     # Sometimes they require manual killing.
